@@ -13,6 +13,8 @@
 #include <stdlib.h>
 #include <math.h>
 #include <iostream>
+#include "metamorph.h"
+#include "metacl_module.h"
 #define INT_MAX	2147483647
 
 struct Node
@@ -27,23 +29,27 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
 		int *h_graph_visited, int *h_cost_ref, int *h_graph_weights,int *h_graph_upcost)
 {
 	cl_int errNum;
-    cl_uint numPlatforms;
-    cl_platform_id firstPlatformId;
-    cl_context context = NULL;
+    	cl_uint numPlatforms;
+    	cl_platform_id firstPlatformId;
+    	cl_context context = NULL;
 	cl_device_id *devices;
-    cl_command_queue commandQueue = NULL;
+    	cl_command_queue commandQueue = NULL;
 	cl_program program;
 	cl_kernel kernel1 = 0;
 	cl_kernel kernel2 = 0;
 	cl_device_id device = 0;
-    size_t deviceBufferSize = -1;
+    	size_t deviceBufferSize = -1;
 	const char* fileName="sssp.cl";
 	cl_mem memObjects[10] = {0,0,0,0,0,0,0,0,0,0};
 
-    // First, select an OpenCL platform to run on.  For this example, we
-    // simply choose the first available platform.  Normally, you would
-    // query for all available platforms and select the most appropriate one.
-    
+    	// First, select an OpenCL platform to run on.  For this example, we
+    	// simply choose the first available platform.  Normally, you would
+    	// query for all available platforms and select the most appropriate one.
+    	meta_set_acc(-1, metaModePreferOpenCL); //Must be set to OpenCL, don't need a device since we will override
+    	meta_get_state_OpenCL(&firstPlatformId, &device, &context, &commandQueue);
+	meta_register_module(&meta_gen_opencl_metacl_module_registry);
+
+	/*	
 	clGetPlatformIDs(1, &firstPlatformId, &numPlatforms);
 	
     	cl_context_properties contextProperties[] =
@@ -115,7 +121,7 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
 	//clFinish(commandQueue);
 	clBuildProgram(program, 0, NULL, NULL, NULL, NULL);
 	//clFinish(commandQueue);
-    
+    	*/
 	
 	int *d_over=0;
 	int h_over=1;
@@ -149,8 +155,7 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
 	
 	errNum=clEnqueueWriteBuffer(commandQueue, memObjects[9], CL_TRUE, 0, sizeof(int) * no_of_nodes,h_graph_upcost, 0, NULL, NULL);
 	clFinish(commandQueue);
-	int* d_mask=(int*) malloc(sizeof(int)*no_of_nodes);
-	
+	/*
     	kernel1 = clCreateKernel(program, "kernel1", &errNum);
 	
 	if (kernel1 == NULL)
@@ -172,17 +177,11 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
     }
 	
 	errNum = clSetKernelArg(kernel1, 0, sizeof(cl_mem), &memObjects[0]);
-    
 	errNum |= clSetKernelArg(kernel1, 1, sizeof(cl_mem), &memObjects[1]);
-    
 	errNum |= clSetKernelArg(kernel1, 2, sizeof(cl_mem), &memObjects[2]);
-    
 	errNum |= clSetKernelArg(kernel1, 3, sizeof(cl_mem), &memObjects[3]);
-    
 	errNum |= clSetKernelArg(kernel1, 4, sizeof(cl_mem), &memObjects[4]);
-    
 	errNum |= clSetKernelArg(kernel1, 5, sizeof(cl_mem), &memObjects[5]);
-    
     	errNum |= clSetKernelArg(kernel1, 6, sizeof(cl_mem), &memObjects[7]);
 	errNum |= clSetKernelArg(kernel1, 7, sizeof(cl_mem), &memObjects[8]);
 	errNum |= clSetKernelArg(kernel1, 8, sizeof(cl_mem), &memObjects[9]);
@@ -200,16 +199,16 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
 	errNum |= clSetKernelArg(kernel2, 4, sizeof(cl_mem), &memObjects[7]);
 	errNum |= clSetKernelArg(kernel2, 5, sizeof(cl_mem), &memObjects[9]);
 	errNum |= clSetKernelArg(kernel2, 6, sizeof(cl_mem), &memObjects[5]);
-	
+	*/
 	
 	size_t maxThreads[3];
 	errNum = clGetDeviceInfo(device,CL_DEVICE_MAX_WORK_ITEM_SIZES,sizeof(size_t)*3,&maxThreads, NULL);
 	
 	maxThreads[0] = no_of_nodes < 256? no_of_nodes: 256; //maxThreads[0];
 
-	size_t globalWorkSize[1] = {(no_of_nodes/maxThreads[0])*maxThreads[0] + ((no_of_nodes%maxThreads[0])==0?0:maxThreads[0])}; // one dimensional Range
+	size_t globalWorkSize[3] = {(no_of_nodes/maxThreads[0])*maxThreads[0] + ((no_of_nodes%maxThreads[0])==0?0:maxThreads[0])}; // one dimensional Range
 
-	size_t localWorkSize[1] = {maxThreads[0]};
+	size_t localWorkSize[3] = {maxThreads[0]};
 	
 	int stop=1;
 	int k=0;
@@ -220,11 +219,12 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
 	clEnqueueWriteBuffer(commandQueue, memObjects[6], CL_TRUE, 0, sizeof(int), (void*)&stop, 0, NULL, NULL);
 	clFinish(commandQueue);
 	
-	errNum=clEnqueueNDRangeKernel(commandQueue, kernel1, 1, NULL,globalWorkSize, localWorkSize,0, NULL,NULL);
-	clFinish(commandQueue);	
-	
-	errNum=clEnqueueNDRangeKernel(commandQueue, kernel2, 1, NULL,globalWorkSize, localWorkSize,0, NULL, NULL);
-	clFinish(commandQueue);
+	//errNum=clEnqueueNDRangeKernel(commandQueue, kernel1, 1, NULL,globalWorkSize, localWorkSize,0, NULL,NULL);
+	//clFinish(commandQueue);	
+	errNum= meta_gen_opencl_sssp_kernel1(commandQueue, &globalWorkSize, &localWorkSize, &memObjects[0], &memObjects[1], &memObjects[2], &memObjects[3], &memObjects[4], &memObjects[5], &memObjects[7], &memObjects[8],&memObjects[9], 1, NULL);
+	//errNum=clEnqueueNDRangeKernel(commandQueue, kernel2, 1, NULL,globalWorkSize, localWorkSize,0, NULL, NULL);
+	//clFinish(commandQueue);
+errNum= meta_gen_opencl_sssp_kernel2(commandQueue, &globalWorkSize, &localWorkSize, &memObjects[2], &memObjects[3], &memObjects[4], &memObjects[6], &memObjects[7], &memObjects[9], &memObjects[5], 1, NULL);
 	errNum = clEnqueueReadBuffer(commandQueue, memObjects[6], CL_TRUE,0,sizeof(int), (void*)&stop,0, NULL, NULL);
 	
 	clFinish(commandQueue);
@@ -241,23 +241,18 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
 	
 	
 	clReleaseMemObject(memObjects[0]);
-	
 	clReleaseMemObject(memObjects[1]);
-	
 	clReleaseMemObject(memObjects[2]);
-	
 	clReleaseMemObject(memObjects[3]);
-	
 	clReleaseMemObject(memObjects[4]);
-	
 	clReleaseMemObject(memObjects[5]);
-	
 	clReleaseMemObject(memObjects[6]);
-	
 	clReleaseMemObject(memObjects[7]);
 	clReleaseMemObject(memObjects[8]);
 	clReleaseMemObject(memObjects[9]);
-	
+
+	meta_deregister_module(&meta_gen_opencl_metacl_module_registry);
+	/*
 	clReleaseKernel(kernel1);
 	
 	clReleaseKernel(kernel2);
@@ -266,7 +261,7 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
 	
 	clReleaseContext(context);
 	clReleaseCommandQueue(commandQueue);
-	
+	*/
 	
 }
 
